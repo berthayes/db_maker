@@ -1,23 +1,42 @@
 import csv
+import time
 from collections import namedtuple
 import mysql.connector
 from configparser import ConfigParser
+import argparse
+import sys
+
+parser = argparse.ArgumentParser(description=
+                                 '''
+                                Feed a MySQL database lines from a CSV file
+                                ''')
+parser.add_argument('-f', dest='csv_file', action='store', help='the full path of the .csv file to read')
+parser.add_argument('-t', dest='time_delay', action='store', default=0, help='number of seconds to wait between loading records')
+
+args = parser.parse_args()
+time_delay = int(args.time_delay)
+
+if len(sys.argv) == 1:
+    parser.print_help()
+    sys.exit(1)
 
 cfg = ConfigParser()
 cfg.read('luserdb.conf')
 
 my_db_name = cfg.get('userdb', 'database')
 
-mydb = mysql.connector.connect (
-    host = cfg.get(my_db_name, 'host'),
-    user = cfg.get(my_db_name, 'user'),
-    password = cfg.get(my_db_name, 'password'),
-    database = cfg.get(my_db_name, 'database')
+mydb = mysql.connector.connect(
+    host=cfg.get(my_db_name, 'host'),
+    user=cfg.get(my_db_name, 'user'),
+    password=cfg.get(my_db_name, 'password'),
+    database=cfg.get(my_db_name, 'database'),
+    auth_plugin='mysql_native_password'
 )
 
 mycursor = mydb.cursor(buffered=True, raw=False, dictionary=True)
 
-csv_file = cfg.get(my_db_name, 'input_file')
+# csv_file = cfg.get(my_db_name, 'input_file')
+csv_file = args.csv_file
 with open(csv_file, 'r', encoding='utf-8-sig') as f:
     f_csv = csv.reader(f)
     headings = next(f_csv)
@@ -118,7 +137,7 @@ with open(csv_file, 'r', encoding='utf-8-sig') as f:
             %(Latitude)s, \
             %(Longitude)s)"
 
-        #user_info = dict()
+        # user_info = dict()
         user_info = {
             'Number': row.Number,
             'Gender': row.Gender,
@@ -168,8 +187,11 @@ with open(csv_file, 'r', encoding='utf-8-sig') as f:
         }
 
         mycursor.execute(insert_query, user_info)
+        if time_delay > 0:
+            mydb.commit()
+            time.sleep(time_delay)
+
 
 mydb.commit()
 mycursor.close()
 mydb.close()
-
